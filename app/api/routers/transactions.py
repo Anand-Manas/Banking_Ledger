@@ -22,6 +22,19 @@ def create_transfer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
+    # CRITICAL: Verify the source account belongs to this customer
+    source_account = db.query(Account).filter(
+        Account.account_id == payload.source_account_id,
+        Account.customer_id == customer.customer_id,
+        Account.status == "ACTIVE"
+    ).first()
+
+    if not source_account:
+        raise HTTPException(
+            status_code=403,
+            detail="Source account not found or does not belong to you"
+        )
+
     txn = transfer_money(
         db=db,
         customer_id=customer.customer_id,

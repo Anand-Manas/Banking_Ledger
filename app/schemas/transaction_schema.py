@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 
 class TransferRequest(BaseModel):
-    source_account_id: str
+    source_account_id: UUID  # ← Changed from str to UUID
     destination_account_number: str
     amount: Decimal = Field(..., gt=0)
     idempotency_key: str

@@ -7,6 +7,7 @@ from app.services.account_service import get_accounts_for_customer, get_account_
 from app.services.credit_request_service import create_credit_request, get_customer_credit_requests
 from app.models.customer_model import Customer
 from app.schemas.credit_request_schema import CustomerCreditRequestCreate
+from app.models.account_model import Account
 
 router = APIRouter()
 
