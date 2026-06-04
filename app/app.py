@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.api.routers import auth, admin, customer, transactions, beneficiaries
+from app.api.routers.health import router as health_router
 from app.core.logging import logger
 
 app = FastAPI(
@@ -21,6 +22,7 @@ app = FastAPI(
 
 logger.info("Application started")
 
+app.include_router(health_router, prefix="/health", tags=["Health"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 app.include_router(customer.router, prefix="/customer", tags=["Customer"])
