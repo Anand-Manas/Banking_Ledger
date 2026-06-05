@@ -1,33 +1,39 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
+from sqlalchemy import select
 
-from app.db.session import get_db
-from app.api.deps import require_customer, get_current_user
+from app.db.session_async import get_async_db
+from app.api.deps_async import require_customer_async, get_current_user_async
 from app.schemas.transaction_schema import TransferRequest
-from app.services.transaction_service import transfer_money
-from app.repositories.transaction_repo import get_account_statement
+from app.services.transaction_service_async import transfer_money_async
+from app.repositories.transaction_repo_async import get_account_statement_async
 from app.models.customer_model import Customer
 from app.models.account_model import Account
 
 router = APIRouter()
 
 @router.post("/transfer")
-def create_transfer(
+async def create_transfer(
+    request: Request,
     payload: TransferRequest,
-    db: Session = Depends(get_db),
-    user=Depends(require_customer)
+    db: AsyncSession = Depends(get_async_db),
+    user=Depends(require_customer_async)
 ):
-    customer = db.query(Customer).filter(Customer.user_id == user.user_id).first()
+    result = await db.execute(select(Customer).where(Customer.user_id == user.user_id))
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
     # CRITICAL: Verify the source account belongs to this customer
-    source_account = db.query(Account).filter(
-        Account.account_id == payload.source_account_id,
-        Account.customer_id == customer.customer_id,
-        Account.status == "ACTIVE"
-    ).first()
+    result = await db.execute(
+        select(Account).where(
+            Account.account_id == str(payload.source_account_id),
+            Account.customer_id == customer.customer_id,
+            Account.status == "ACTIVE"
+        )
+    )
+    source_account = result.scalar_one_or_none()
 
     if not source_account:
         raise HTTPException(
@@ -35,13 +41,14 @@ def create_transfer(
             detail="Source account not found or does not belong to you"
         )
 
-    txn = transfer_money(
+    txn = await transfer_money_async(
         db=db,
         customer_id=customer.customer_id,
         source_account_id=payload.source_account_id,
         destination_account_number=payload.destination_account_number,
         amount=Decimal(str(payload.amount)),
         idempotency_key=payload.idempotency_key,
+        ip_address=request.client.host,
     )
     return {
         "transaction_id": str(txn.transaction_id),
@@ -50,24 +57,28 @@ def create_transfer(
     }
 
 @router.get("/statement/{account_id}")
-def get_statement(
+async def get_statement(
     account_id: str,
     limit: int = 10,
-    db: Session = Depends(get_db),
-    user=Depends(require_customer)
+    db: AsyncSession = Depends(get_async_db),
+    user=Depends(require_customer_async)
 ):
-    customer = db.query(Customer).filter(Customer.user_id == user.user_id).first()
+    result = await db.execute(select(Customer).where(Customer.user_id == user.user_id))
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    account = db.query(Account).filter(
-        Account.account_id == account_id,
-        Account.customer_id == customer.customer_id
-    ).first()
+    result = await db.execute(
+        select(Account).where(
+            Account.account_id == account_id,
+            Account.customer_id == customer.customer_id
+        )
+    )
+    account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    transactions = get_account_statement(db, account_id, limit)
+    transactions = await get_account_statement_async(db, account_id, limit)
     return {
         "account_id": account_id,
         "current_balance": str(account.balance),

@@ -1,45 +1,54 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from uuid import UUID
 
-from app.db.session import get_db
-from app.api.deps import require_customer
+from app.db.session_async import get_async_db
+from app.api.deps_async import require_customer_async
 from app.models.beneficiary_model import Beneficiary
 from app.models.customer_model import Customer
 from app.models.account_model import Account
+from app.services.audit_service_async import log_audit_async
 
 router = APIRouter()
 
 @router.post("/")
-def add_beneficiary(
+async def add_beneficiary(
+    request: Request,
     beneficiary_account_number: str,
     bank_name: str,
-    db: Session = Depends(get_db),
-    user=Depends(require_customer)
+    db: AsyncSession = Depends(get_async_db),
+    user=Depends(require_customer_async)
 ):
-    customer = db.query(Customer).filter(Customer.user_id == user.user_id).first()
+    result = await db.execute(
+        select(Customer).where(Customer.user_id == user.user_id)
+    )
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
     # BLOCK: Cannot add your own account as beneficiary
-    own_account = db.query(Account).filter(
-        Account.account_number == beneficiary_account_number,
-        Account.customer_id == customer.customer_id
-    ).first()
-
-    if own_account:
+    own_result = await db.execute(
+        select(Account).where(
+            Account.account_number == beneficiary_account_number,
+            Account.customer_id == customer.customer_id
+        )
+    )
+    if own_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot add your own account as a beneficiary"
         )
 
-    # BLOCK: Duplicate beneficiary
-    existing = db.query(Beneficiary).filter(
-        Beneficiary.customer_id == customer.customer_id,
-        Beneficiary.beneficiary_account_number == beneficiary_account_number
-    ).first()
-
-    if existing:
+    # BLOCK: Duplicate active beneficiary
+    existing = await db.execute(
+        select(Beneficiary).where(
+            Beneficiary.customer_id == customer.customer_id,
+            Beneficiary.beneficiary_account_number == beneficiary_account_number,
+            Beneficiary.status == "ACTIVE"
+        )
+    )
+    if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Beneficiary already exists"
@@ -51,8 +60,14 @@ def add_beneficiary(
         bank_name=bank_name,
     )
     db.add(beneficiary)
-    db.commit()
-    db.refresh(beneficiary)
+    await db.commit()
+    await db.refresh(beneficiary)
+
+    await log_audit_async(
+        db, user.user_id, "BENEFICIARY_ADDED", "BENEFICIARY", beneficiary.beneficiary_id,
+        ip_address=request.client.host
+    )
+    await db.commit()
 
     return {
         "beneficiary_id": str(beneficiary.beneficiary_id),
@@ -62,18 +77,24 @@ def add_beneficiary(
     }
 
 @router.get("/")
-def list_beneficiaries(
-    db: Session = Depends(get_db),
-    user=Depends(require_customer)
+async def list_beneficiaries(
+    db: AsyncSession = Depends(get_async_db),
+    user=Depends(require_customer_async)
 ):
-    customer = db.query(Customer).filter(Customer.user_id == user.user_id).first()
+    result = await db.execute(
+        select(Customer).where(Customer.user_id == user.user_id)
+    )
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    beneficiaries = db.query(Beneficiary).filter(
-        Beneficiary.customer_id == customer.customer_id,
-        Beneficiary.status == "ACTIVE"
-    ).all()
+    ben_result = await db.execute(
+        select(Beneficiary).where(
+            Beneficiary.customer_id == customer.customer_id,
+            Beneficiary.status == "ACTIVE"
+        )
+    )
+    beneficiaries = ben_result.scalars().all()
 
     return [
         {
@@ -86,20 +107,27 @@ def list_beneficiaries(
     ]
 
 @router.delete("/{beneficiary_id}")
-def remove_beneficiary(
+async def remove_beneficiary(
+    request: Request,
     beneficiary_id: UUID,
-    db: Session = Depends(get_db),
-    user=Depends(require_customer)
+    db: AsyncSession = Depends(get_async_db),
+    user=Depends(require_customer_async)
 ):
-    customer = db.query(Customer).filter(Customer.user_id == user.user_id).first()
+    result = await db.execute(
+        select(Customer).where(Customer.user_id == user.user_id)
+    )
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Ownership check: must belong to this customer
-    beneficiary = db.query(Beneficiary).filter(
-        Beneficiary.beneficiary_id == beneficiary_id,
-        Beneficiary.customer_id == customer.customer_id
-    ).first()
+    # Ownership check
+    ben_result = await db.execute(
+        select(Beneficiary).where(
+            Beneficiary.beneficiary_id == beneficiary_id,
+            Beneficiary.customer_id == customer.customer_id
+        )
+    )
+    beneficiary = ben_result.scalar_one_or_none()
 
     if not beneficiary:
         raise HTTPException(
@@ -107,9 +135,15 @@ def remove_beneficiary(
             detail="Beneficiary not found"
         )
 
-    # Soft delete: mark INACTIVE instead of hard delete
+    # Soft delete
     beneficiary.status = "INACTIVE"
-    db.commit()
+    await db.commit()
+
+    await log_audit_async(
+        db, user.user_id, "BENEFICIARY_REMOVED", "BENEFICIARY", beneficiary_id,
+        ip_address=request.client.host
+    )
+    await db.commit()
 
     return {
         "beneficiary_id": str(beneficiary.beneficiary_id),

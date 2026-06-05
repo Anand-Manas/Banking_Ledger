@@ -9,7 +9,9 @@ from app.models.account_model import Account
 from app.models.customer_model import Customer
 from app.models.transaction_model import Transaction
 from app.models.user import User
+from app.models.user_role import UserRole
 from app.models.audit_log import AuditLog
+from app.models.credit_request import CreditRequest
 from app.services.transaction_service import transfer_money
 
 engine = create_engine(settings.DATABASE_URL)
@@ -18,10 +20,13 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def setup_test_data():
     db = TestingSessionLocal()
     try:
+        # FIX: Delete in correct FK order (children before parents)
         db.query(AuditLog).delete()
+        db.query(CreditRequest).delete()
         db.query(Transaction).delete()
         db.query(Account).delete()
         db.query(Customer).delete()
+        db.query(UserRole).delete()
         db.query(User).delete()
         db.commit()
 

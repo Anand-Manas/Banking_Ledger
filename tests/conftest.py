@@ -13,6 +13,8 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.customer_model import Customer
 from app.models.account_model import Account
+from app.models.audit_log import AuditLog
+from app.models.credit_request import CreditRequest  # ← ADD
 from app.core.security import hash_password
 
 @pytest.fixture(scope="session", autouse=True)
@@ -38,6 +40,16 @@ def db_session():
 def admin_token(client):
     db = SessionLocal()
     try:
+        # FIX: Delete credit_requests where this admin was processor
+        db.query(CreditRequest).filter(CreditRequest.processed_by.in_(
+            db.query(User.user_id).filter(User.username == "test_admin")
+        )).delete(synchronize_session=False)
+
+        # FIX: Delete audit_logs FIRST (FK to users)
+        db.query(AuditLog).filter(AuditLog.user_id.in_(
+            db.query(User.user_id).filter(User.username == "test_admin")
+        )).delete(synchronize_session=False)
+        
         db.query(UserRole).filter(UserRole.user_id.in_(
             db.query(User.user_id).filter(User.username == "test_admin")
         )).delete(synchronize_session=False)

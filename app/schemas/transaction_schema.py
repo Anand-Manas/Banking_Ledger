@@ -1,11 +1,11 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional, List
 
 class TransferRequest(BaseModel):
-    source_account_id: UUID  # ← Changed from str to UUID
+    source_account_id: UUID
     destination_account_number: str
     amount: Decimal = Field(..., gt=0)
     idempotency_key: str
@@ -18,8 +18,7 @@ class TransactionEntry(BaseModel):
     status: str
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MiniStatementResponse(BaseModel):
     account_id: UUID

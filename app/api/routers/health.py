@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import engine
@@ -32,6 +33,5 @@ def health_check():
         health["services"]["redis"] = f"down: {str(e)}"
         health["status"] = "unhealthy"
 
-    from fastapi import status
     code = status.HTTP_200_OK if health["status"] == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
-    return health, code
+    return JSONResponse(content=health, status_code=code)
