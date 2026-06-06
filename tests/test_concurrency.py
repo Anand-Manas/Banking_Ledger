@@ -20,7 +20,6 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def setup_test_data():
     db = TestingSessionLocal()
     try:
-        # FIX: Delete in correct FK order (children before parents)
         db.query(AuditLog).delete()
         db.query(CreditRequest).delete()
         db.query(Transaction).delete()

@@ -97,9 +97,7 @@ async def approve_credit_request_async(db: AsyncSession, request_id: str, admin_
     request.processed_by = admin_user_id
 
     await db.commit()
-
-    # FIX: Invalidate cache so subsequent reads get the new balance
-    invalidate_cache(f"account:{account.account_id}")  # ← ADD
+    invalidate_cache(f"account:{account.account_id}")
 
     await log_audit_async(
         db=db, user_id=admin_user_id,

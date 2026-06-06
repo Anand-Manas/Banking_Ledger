@@ -32,8 +32,6 @@ async def authenticate_user_async(db: AsyncSession, username: str, password: str
             detail="User account is blocked"
         )
 
-    # FIX: Use datetime.utcnow() (naive) instead of datetime.now(timezone.utc) (aware)
-    # because PostgreSQL TIMESTAMP column does not store timezone info
     user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
 
     token = create_access_token(data={"sub": str(user.user_id)})

@@ -1,5 +1,6 @@
 import json
 import redis
+import asyncio
 from app.core.config import settings
 
 _redis_client = None
@@ -27,9 +28,20 @@ def set_cache(key: str, value, ttl: int = 60):
     except Exception:
         pass
 
-def invalidate_cache(*keys):
+def _sync_delete(*keys):
     try:
         client = get_redis_client()
         client.delete(*keys)
     except Exception:
         pass
+
+def invalidate_cache(*keys):
+    if not keys:
+        return
+    # Run sync Redis in a thread pool so it doesn't block the async event loop
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, _sync_delete, *keys)
+    except RuntimeError:
+        # No running loop (sync context)
+        _sync_delete(*keys)

@@ -126,7 +126,6 @@ async def admin_credit_account(
     account.balance += Decimal(str(payload.amount))
     await db.commit()
 
-    # FIX: Invalidate cache so reads reflect the new balance
     invalidate_cache(f"account:{account.account_id}")  # ← ADD
 
     await log_audit_async(

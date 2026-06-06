@@ -25,7 +25,6 @@ async def create_transfer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # CRITICAL: Verify the source account belongs to this customer
     result = await db.execute(
         select(Account).where(
             Account.account_id == str(payload.source_account_id),

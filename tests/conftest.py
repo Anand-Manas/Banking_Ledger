@@ -40,12 +40,10 @@ def db_session():
 def admin_token(client):
     db = SessionLocal()
     try:
-        # FIX: Delete credit_requests where this admin was processor
         db.query(CreditRequest).filter(CreditRequest.processed_by.in_(
             db.query(User.user_id).filter(User.username == "test_admin")
         )).delete(synchronize_session=False)
 
-        # FIX: Delete audit_logs FIRST (FK to users)
         db.query(AuditLog).filter(AuditLog.user_id.in_(
             db.query(User.user_id).filter(User.username == "test_admin")
         )).delete(synchronize_session=False)
