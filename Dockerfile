@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# CACHE BUST: forces Railway to rebuild from this layer
-RUN echo "cache-bust-2026-06-06-001"
+# AGGRESSIVE CACHE BUST: writes to disk, always invalidates next layer
+RUN date +%s > /tmp/cache-bust-2026-06-06-002
 
 COPY . .
 
