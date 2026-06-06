@@ -1,34 +1,18 @@
-# ---------- Build Stage ----------
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install build deps for psycopg2 + asyncpg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# ---------- Runtime Stage ----------
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Copy only runtime Python packages
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
-
-# Install libpq runtime only (no gcc)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 EXPOSE 8000
 
-# Railway sets $PORT at runtime; default to 8000 for local Docker
-CMD sh -c "if [ -f alembic.ini ]; then alembic upgrade head; fi && uvicorn app.app:app --host 0.0.0.0 --port ${PORT:-8000}"
+# Debug: print env vars, then run migrations if alembic exists, then start app
+CMD ["sh", "-c", "echo '--- ENV DEBUG ---' && echo DATABASE_URL=$DATABASE_URL && echo PORT=$PORT && echo '--- STARTING ---' && if [ -f alembic.ini ] && [ -d alembic/versions ] && [ \"$(ls -A alembic/versions)\" ]; then alembic upgrade head; else echo 'No migrations found, skipping alembic'; fi && uvicorn app.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
