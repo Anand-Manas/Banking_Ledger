@@ -9,10 +9,6 @@ router = APIRouter()
 
 @router.get("/health")
 def health_check():
-    """
-    Health check endpoint for Docker/orchestration.
-    Returns 200 only if both PostgreSQL and Redis are reachable.
-    """
     health = {"status": "healthy", "services": {}}
 
     # Check PostgreSQL
@@ -33,5 +29,9 @@ def health_check():
         health["services"]["redis"] = f"down: {str(e)}"
         health["status"] = "unhealthy"
 
-    code = status.HTTP_200_OK if health["status"] == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
+    code = (
+        status.HTTP_200_OK
+        if health["status"] == "healthy"
+        else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
     return JSONResponse(content=health, status_code=code)

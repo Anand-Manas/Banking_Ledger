@@ -1,1 +1,0 @@
-"* text=auto eol=lf" | Out-File -FilePath .gitattributes -Encoding utf8
